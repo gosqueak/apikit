@@ -115,7 +115,7 @@ func GetTokenFromCookie(r *http.Request, name string) (jwt.Jwt, error) {
 	return jwt.FromString(tokenCookie.Value)
 }
 
-func Retry[T any](nTries uint, fn any, fnargs []any) (T, error) {
+func Retry[T any](nTries uint, fn any, fnargs ...any) (T, error) {
 	fnValue := reflect.ValueOf(fn)
 	fnType := fnValue.Type()
 
