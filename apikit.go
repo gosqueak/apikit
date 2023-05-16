@@ -115,27 +115,35 @@ func GetTokenFromCookie(r *http.Request, name string) (jwt.Jwt, error) {
 	return jwt.FromString(tokenCookie.Value)
 }
 
-func Retry[T any](nTries uint, fn any, fnargs ...any) (T, error) {
+func Retry[T any](nTries int, fn any, fnargs ...any) (T, error) {
 	fnValue := reflect.ValueOf(fn)
 	fnType := fnValue.Type()
 
-	if fnValue.Kind() != reflect.Func || fnType.NumOut() != 2 || fnType.Out(1) != reflect.TypeOf((*error)(nil)).Elem() {
+	paramsAreValid := func() bool {
+		var error reflect.Type = reflect.TypeOf((*error)(nil)).Elem()
+		return fnValue.Kind() != reflect.Func ||
+			fnType.NumOut() != 2 ||
+			fnType.Out(1) != error
+	}
+
+	if paramsAreValid() {
 		panic("fn must be a function that returns (any, error)")
 	}
 
+	// convert fnargs to reflect values
 	var values []reflect.Value
 	for _, arg := range fnargs {
 		values = append(values, reflect.ValueOf(arg))
 	}
 
-	var v T
-	var e any
-	var tryNumber uint
 	interval := time.Second
 
-	for ; tryNumber < nTries; tryNumber++ {
-		if tryNumber > 0 {
-			fmt.Printf("ERROR: %v retrying....\n", e.(error))
+	var returnedT T
+	var returnedError error
+
+	for try := 0; try < nTries; try++ {
+		if try > 0 {
+			fmt.Printf("ERROR: %v retrying....\n", returnedError)
 			time.Sleep(interval)
 			// exponential delay
 			interval *= 2
@@ -143,15 +151,14 @@ func Retry[T any](nTries uint, fn any, fnargs ...any) (T, error) {
 
 		results := fnValue.Call(values)
 
-		v = results[0].Interface().(T)
-		e = results[1].Interface()
+		returnedT = results[0].Interface().(T)
+		returnedError = results[1].Interface().(error)
 
-		if e != nil { // error was returned, retry
+		if returnedError != nil { // error was returned, retry
 			continue
 		}
 
-		return v, nil
+		return returnedT, nil
 	}
-
-	return v, e.(error)
+	return returnedT, returnedError
 }
