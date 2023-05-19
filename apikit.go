@@ -139,7 +139,7 @@ func Retry[T any](nTries int, fn any, fnargs ...any) (T, error) {
 	interval := time.Second
 
 	var returnedT T
-	var returnedError error
+	var returnedError any
 
 	for try := 0; try < nTries; try++ {
 		if try > 0 {
@@ -152,7 +152,7 @@ func Retry[T any](nTries int, fn any, fnargs ...any) (T, error) {
 		results := fnValue.Call(values)
 
 		returnedT = results[0].Interface().(T)
-		returnedError = results[1].Interface().(error)
+		returnedError = results[1].Interface()
 
 		if returnedError != nil { // error was returned, retry
 			continue
@@ -160,5 +160,5 @@ func Retry[T any](nTries int, fn any, fnargs ...any) (T, error) {
 
 		return returnedT, nil
 	}
-	return returnedT, returnedError
+	return returnedT, returnedError.(error)
 }
