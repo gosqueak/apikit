@@ -1,8 +1,10 @@
 package apikit
 
 import (
+	"bufio"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"reflect"
 	"time"
@@ -24,6 +26,11 @@ func newLoggingResponseWriter(w http.ResponseWriter) *loggingResponseWriter {
 func (l *loggingResponseWriter) WriteHeader(code int) {
 	l.statusCode = code
 	l.ResponseWriter.WriteHeader(code)
+}
+
+// need to implement Hijack for websockets to work.
+func (l *loggingResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	return l.ResponseWriter.(http.Hijacker).Hijack()
 }
 
 // http errors
@@ -53,14 +60,6 @@ func LogMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-func CorsMiddleware(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-
-		next(w, r)
-	}
-}
-
 // Middleware for ensuring a cookie exists with a valid token
 func CookieTokenMiddleware(cookieName string, aud jwt.Audience, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -85,7 +84,14 @@ func CookieTokenMiddleware(cookieName string, aud jwt.Audience, next http.Handle
 	}
 }
 
-func SetHttpOnlyCookie(w http.ResponseWriter, name, value string, maxAge int) {
+func SetHttpOnlyCookie(w http.ResponseWriter, name, value string, maxAge int, origin string) {
+	// add headers to allows transfer of cookies
+	// credentials: 'include' requires that the Access-Control-Allow-Origin header be set to the exact
+	//  origin (that means * will be rejected),
+	//  and the Access-Control-Allow-Credentials header be set to true.
+	w.Header().Set("Access-Control-Allow-Origin", origin)
+	w.Header().Set("Access-Control-Allow-Credentials", "true")
+
 	http.SetCookie(w, &http.Cookie{
 		Name:     name,
 		Value:    value,
