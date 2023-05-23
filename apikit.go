@@ -33,21 +33,20 @@ func (l *loggingResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	return l.ResponseWriter.(http.Hijacker).Hijack()
 }
 
-// http errors
-func ErrStatusUnauthorized(w http.ResponseWriter) {
-	http.Error(w, "Could not authorize", http.StatusUnauthorized)
+var defaultErrorMessages = map[int]string{
+	http.StatusUnauthorized:        "unauthorized",
+	http.StatusBadRequest:          "bad request",
+	http.StatusInternalServerError: "internal server error",
+	http.StatusMethodNotAllowed:    "method not allowed",
 }
 
-func ErrInternal(w http.ResponseWriter) {
-	http.Error(w, "internal error", http.StatusInternalServerError)
-}
+// wrapper to http.Error with default error messages
+func Error(w http.ResponseWriter, msg string, code int) {
+	if msg == "" {
+		msg = defaultErrorMessages[code]
+	}
 
-func ErrBadRequest(w http.ResponseWriter) {
-	http.Error(w, "invalid request", http.StatusBadRequest)
-}
-
-func ErrMethodNotAllowed(w http.ResponseWriter) {
-	http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	http.Error(w, msg, code)
 }
 
 type Middleware func(http.HandlerFunc) http.HandlerFunc
@@ -65,18 +64,23 @@ func CookieTokenMiddleware(cookieName string, aud jwt.Audience, next http.Handle
 	return func(w http.ResponseWriter, r *http.Request) {
 		token, err := GetTokenFromCookie(r, cookieName)
 
-		if err == http.ErrNoCookie || err == jwt.ErrCannotParse {
-			ErrBadRequest(w)
+		if err == http.ErrNoCookie {
+			Error(w, "JWT cookie not present", http.StatusUnauthorized)
+			return
+		}
+
+		if err == jwt.ErrCannotParse {
+			Error(w, "could not parse JWT", http.StatusUnauthorized)
 			return
 		}
 
 		if err != nil { // something else bad happened :\
-			ErrInternal(w)
+			Error(w, "", http.StatusInternalServerError)
 			return
 		}
 
 		if !aud.IsValid(token) {
-			ErrStatusUnauthorized(w)
+			Error(w, "invalid JWT", http.StatusUnauthorized)
 			return
 		}
 
