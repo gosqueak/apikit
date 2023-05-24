@@ -2,6 +2,7 @@ package apikit
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"log"
 	"net"
@@ -10,6 +11,12 @@ import (
 	"time"
 
 	"github.com/gosqueak/jwt"
+)
+
+const (
+	CookieNameRefreshToken = "refreshToken"
+	CookieNameAccessToken  = "accessToken"
+	CookieNameAPIToken     = "APIToken"
 )
 
 // wraps a http.ResponseWriter but records details from the response
@@ -60,7 +67,7 @@ func LogMiddleware(next http.HandlerFunc) http.HandlerFunc {
 }
 
 // Middleware for ensuring a cookie exists with a valid token
-func CookieTokenMiddleware(cookieName string, aud jwt.Audience, next http.HandlerFunc) http.HandlerFunc {
+func TokenMiddleware(cookieName string, aud jwt.Audience, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		token, err := GetTokenFromCookie(r, cookieName)
 
@@ -84,16 +91,18 @@ func CookieTokenMiddleware(cookieName string, aud jwt.Audience, next http.Handle
 			return
 		}
 
+		r = r.WithContext(context.WithValue(r.Context(), cookieName, token))
+
 		next(w, r)
 	}
 }
 
-func SetHttpOnlyCookie(w http.ResponseWriter, name, value string, maxAge int, origin string) {
+func SetHttpOnlyCookie(w http.ResponseWriter, allowedOrigin, name, value string, maxAge int) {
 	// add headers to allows transfer of cookies
 	// credentials: 'include' requires that the Access-Control-Allow-Origin header be set to the exact
 	//  origin (that means * will be rejected),
 	//  and the Access-Control-Allow-Credentials header be set to true.
-	w.Header().Set("Access-Control-Allow-Origin", origin)
+	w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
 	w.Header().Set("Access-Control-Allow-Credentials", "true")
 
 	http.SetCookie(w, &http.Cookie{
